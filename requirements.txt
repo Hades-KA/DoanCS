@@ -1,0 +1,14 @@
+flask
+streamlit
+streamlit-tags
+pandas
+numpy
+pdfminer.six
+nltk
+spacy==2.3.5
+scikit-learn
+joblib
+pyresparser
+pdfplumber
+transformers
+torch
