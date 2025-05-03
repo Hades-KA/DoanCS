@@ -12,3 +12,4 @@ pyresparser
 pdfplumber
 transformers
 torch
+matplotlib
