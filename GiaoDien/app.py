@@ -143,6 +143,7 @@ def process_cv(file_path, sample_cv_text):
 def analyze_cvs(uploaded_paths, sample_cv_text):
     """Phân tích tất cả các CV song song."""
     results = []
+    warnings = []  # Danh sách lưu cảnh báo
     progress_bar = st.progress(0)  # Thanh tiến trình duy nhất
     total_files = len(uploaded_paths)
 
@@ -153,8 +154,15 @@ def analyze_cvs(uploaded_paths, sample_cv_text):
             if result:
                 results.append(result)
             else:
-                st.warning(f"⚠️ CV tại {uploaded_paths[i]} không có kỹ năng chuyên môn và đã bị loại bỏ.")
+                warnings.append(f"⚠️ CV tại {uploaded_paths[i]} không có kỹ năng chuyên môn và đã bị loại bỏ.")
             progress_bar.progress((i + 1) / total_files)  # Cập nhật tiến trình tổng thể
+
+    # Hiển thị cảnh báo sau khi hoàn tất
+    if warnings:
+        st.warning(f"⚠️ Có {len(warnings)} CV đã bị loại bỏ do không có kỹ năng chuyên môn.")
+        with st.expander("Xem chi tiết các cảnh báo"):
+            st.write("\n".join(warnings))  # Hiển thị tất cả cảnh báo trong một khối cuộn
+
     return pd.DataFrame(results)
 
 # --- Giao diện chính ---
@@ -175,10 +183,14 @@ def main():
         df = analyze_cvs(uploaded_paths, sample_cv_text)
         my_bar.progress(1.0)
 
+        # Hiển thị tóm tắt kết quả
+        st.subheader("📊 Tóm tắt kết quả")
+        st.success(f"✅ Đã phân tích {len(df)} CV hợp lệ trên tổng số {len(uploaded_files)} CV.")
+        st.warning(f"⚠️ {len(uploaded_files) - len(df)} CV đã bị loại bỏ.")
+
         if df.empty:
             st.warning("⚠️ Không có CV nào được phân tích.")
         else:
-            st.success(f"✅ Đã phân tích {len(df)} CV.")
             st.subheader("📋 Danh sách ứng viên ngành IT")
             df.index = df.index + 1  # Đánh số thứ tự từ 1
             st.dataframe(df)
