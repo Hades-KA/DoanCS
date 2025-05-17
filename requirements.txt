@@ -13,3 +13,4 @@ pdfplumber
 transformers
 torch
 matplotlib
+streamlit-option-menu
