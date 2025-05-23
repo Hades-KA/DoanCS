@@ -14,3 +14,4 @@ transformers
 torch
 matplotlib
 streamlit-option-menu
+rapidfuzz
