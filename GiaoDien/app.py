@@ -353,64 +353,44 @@ def main():
                     if selected_path:
                         text = extract_text_from_pdf(selected_path)
                         if text:
-                            st.markdown(f"### 📄 Phân tích chi tiết CV: `{selected_file}`")
-                            display_pdf(selected_path)
+                            # ==== So sánh CV tiêu chí và CV ứng viên (gọn, có icon) ====
+                            criteria_text = extract_text_from_pdf(st.session_state['sample_cv_path'])
+                            criteria_name = extract_name(criteria_text)
+                            criteria_skills = extract_skills_list(criteria_text)
+                            criteria_field = st.session_state['target_field']
 
-                            st.markdown(
-                                """
-                                <div style="background-color: #1e293b; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
-                                    <p><strong>Tên file:</strong> {}</p>
-                                    <p><strong>Tên ứng viên:</strong> {}</p>
-                                    <p><strong>Mảng IT:</strong> {}</p>
-                                    <p><strong>Phần trăm phù hợp:</strong> {}%</p>
-                                    <p><strong>Kết quả:</strong> {}</p>
-                                </div>
-                                """.format(
-                                    selected_file,
-                                    extract_name(text),
-                                    target_field,
-                                    df_show.loc[df_show['Tên file'] == selected_file, 'Phần trăm phù hợp'].values[0],
-                                    df_show.loc[df_show['Tên file'] == selected_file, 'Kết quả'].values[0]
-                                ),
-                                unsafe_allow_html=True
-                            )
-
-                            present_skills = extract_present_skills(text)
-                            st.markdown("### 🛠️ Kỹ năng CV hiện có")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in present_skills) + "</ul>"
-                                if present_skills else "Không rõ",
-                                unsafe_allow_html=True
-                            )
-
+                            candidate_name = extract_name(text)
                             candidate_skills = extract_skills_list(text)
                             project_skills = extract_skills_from_projects(text)
-                            total_skills = list(set(candidate_skills + project_skills))
-                            matched, missing, skill_coverage = match_skills_accurately(total_skills, expected_skills, project_skills)
+                            matched, missing, skill_coverage = match_skills_accurately(candidate_skills + project_skills, criteria_skills, project_skills)
+                            result = df_show.loc[df_show['Tên file'] == selected_file].iloc[0]
 
-                            st.markdown("### 📊 Tỉ lệ phù hợp")
-                            st.markdown(f"- **Tổng**: {skill_coverage}%")
+                            colA, colB = st.columns(2)
+                            with colA:
+                                st.markdown(f"""
+                                <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px;">
+                                <h3 style="color:#fff;margin-bottom:10px;">📝 <b>CV tiêu chí</b></h3>
+                                <b>🛠️ Kỹ năng yêu cầu:</b> {', '.join(criteria_skills)}<br>
+                                <b>💼 Lĩnh vực IT:</b> {criteria_field}
+                                </div>
+                                """, unsafe_allow_html=True)
 
-                            st.markdown("### ✅ Kỹ năng phù hợp")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in matched) + "</ul>"
-                                if matched else "Không rõ",
-                                unsafe_allow_html=True
-                            )
+                            with colB:
+                                st.markdown(f"""
+                                <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px;">
+                                <h3 style="color:#fff;margin-bottom:10px;">👤 <b>Chi tiết ứng viên: {candidate_name}</b></h3>
+                                <b>📄 Tên file:</b> {selected_file}<br>
+                                <b>💼 Mảng IT:</b> {result['Mảng IT']}<br>
+                                <b>📊 Phần trăm phù hợp:</b> {result['Phần trăm phù hợp']}%<br>
+                                <b>✅ Kết quả:</b> {result['Kết quả']}<br>
+                                <b>🟢 Kỹ năng phù hợp:</b> {', '.join(matched) if matched else 'Không rõ'}<br>
+                                <b>🔴 Kỹ năng còn thiếu:</b> {', '.join(missing) if missing else 'Không rõ'}<br>
+                                <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}                                </div>
+                                """, unsafe_allow_html=True)
 
-                            st.markdown("### ❌ Kỹ năng còn thiếu")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in missing) + "</ul>"
-                                if missing else "Không rõ",
-                                unsafe_allow_html=True
-                            )
-
-                            st.markdown("### 📂 Kỹ năng trong project")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in project_skills) + "</ul>"
-                                if project_skills else "Không rõ",
-                                unsafe_allow_html=True
-                            )
+                            # ==== Phân tích chi tiết CV ====
+                            st.markdown(f"### 📄 Phân tích chi tiết CV: `{selected_file}`")
+                            display_pdf(selected_path)
 
     elif menu == "Dashboard báo cáo":
         st.header("📊 Dashboard Báo cáo & Phân tích Kết quả")
