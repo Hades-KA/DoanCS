@@ -248,7 +248,7 @@ def main():
 
     st.title("📄 Hệ thống Hỗ trợ Quản lý Tuyển dụng bằng AI")
 
-    # Lưu và lấy lại dữ liệu từ session_state để không bị reset khi chuyển menu
+    # --- Khởi tạo session_state ---
     if 'last_df' not in st.session_state:
         st.session_state['last_df'] = None
     if 'uploaded_paths' not in st.session_state:
@@ -257,36 +257,96 @@ def main():
         st.session_state['expected_skills'] = []
     if 'target_field' not in st.session_state:
         st.session_state['target_field'] = ""
+    if 'sample_cv_path' not in st.session_state:
+        st.session_state['sample_cv_path'] = None
+    if 'cv_valid_count' not in st.session_state:
+        st.session_state['cv_valid_count'] = 0
+    if 'cv_invalid_count' not in st.session_state:
+        st.session_state['cv_invalid_count'] = 0
+    if 'view_page' not in st.session_state:
+        st.session_state['view_page'] = 'phuhop'
 
     if menu == "Phân tích CV":
         st.header("📄 Phân tích CV")
-        sample_cv_file = st.file_uploader("📌 Tải lên CV tiêu chí", type="pdf", key="sample_cv_file")
-        uploaded_files = st.file_uploader("📅 Tải lên các CV ứng viên", type=["pdf"], accept_multiple_files=True, key="uploaded_files")
 
-        # Nếu đã có kết quả phân tích trước đó thì dùng lại
+        # --- Xử lý upload CV tiêu chí ---
+        if st.session_state['sample_cv_path']:
+            st.success(f"Đã upload CV tiêu chí: {os.path.basename(st.session_state['sample_cv_path'])}")
+            if st.button("Xóa CV tiêu chí"):
+                st.session_state['sample_cv_path'] = None
+                st.session_state['expected_skills'] = []
+                st.session_state['target_field'] = ""
+        else:
+            sample_cv_file = st.file_uploader("📌 Tải lên CV tiêu chí", type="pdf", key="sample_cv_file")
+            if sample_cv_file:
+                st.session_state['sample_cv_path'] = save_uploadedfile(sample_cv_file)
+                sample_cv_text = extract_text_from_pdf(st.session_state['sample_cv_path'])
+                st.session_state['expected_skills'] = extract_skills_list(sample_cv_text)
+                st.session_state['target_field'], _ = predict_field(sample_cv_text)
+
+        # --- Xử lý upload các CV ứng viên ---
+        if st.session_state['uploaded_paths']:
+            st.success(f"Đã upload {len(st.session_state['uploaded_paths'])} CV ứng viên.")
+            if st.button("Xóa tất cả CV ứng viên"):
+                st.session_state['uploaded_paths'] = []
+        else:
+            uploaded_files = st.file_uploader("📅 Tải lên các CV ứng viên", type=["pdf"], accept_multiple_files=True, key="uploaded_files")
+            if uploaded_files:
+                st.session_state['uploaded_paths'] = [save_uploadedfile(f) for f in uploaded_files]
+
+        # --- Hiển thị lại thông báo kết quả ---
+        if st.session_state['cv_valid_count'] > 0:
+            st.success(f"✅ Đã phân tích {st.session_state['cv_valid_count']} CV hợp lệ trên tổng số {st.session_state['cv_valid_count'] + st.session_state['cv_invalid_count']} CV.")
+        if st.session_state['cv_invalid_count'] > 0:
+            st.warning(f"⚠️ Có {st.session_state['cv_invalid_count']} CV đã bị loại bỏ do không đạt tiêu chí.")
+
+        # --- Phân tích khi đủ dữ liệu ---
+        if st.session_state['sample_cv_path'] and st.session_state['uploaded_paths']:
+            if st.button("🚀 Phân tích CV ứng viên"):
+                expected_skills = st.session_state['expected_skills']
+                target_field = st.session_state['target_field']
+                uploaded_paths = st.session_state['uploaded_paths']
+
+                with st.spinner("🔎 Đang tiến hành phân tích CV..."):
+                    my_bar = st.progress(0)
+                    df = analyze_cvs(uploaded_paths, expected_skills, target_field)
+                    my_bar.progress(1.0)
+
+                st.session_state['last_df'] = df
+                st.session_state['cv_valid_count'] = len(df)
+                st.session_state['cv_invalid_count'] = len(uploaded_paths) - len(df)
+
+        # --- Hiển thị kết quả nếu đã phân tích ---
         if st.session_state['last_df'] is not None and len(st.session_state['last_df']) > 0:
             df = st.session_state['last_df']
             uploaded_paths = st.session_state['uploaded_paths']
             expected_skills = st.session_state['expected_skills']
             target_field = st.session_state['target_field']
 
-            st.subheader("📋 Danh sách ứng viên phù hợp")
-            if df.empty or all(df['Kết quả'] == "Không phù hợp"):
-                st.warning("⚠️ Không có CV nào phù hợp với tiêu chí.")
-            else:
-                df.index = df.index + 1
-                st.dataframe(df)
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📋 Danh sách ứng viên phù hợp"):
+                    st.session_state['view_page'] = 'phuhop'
+            with col2:
+                if st.button("📋 Danh sách ứng viên không phù hợp"):
+                    st.session_state['view_page'] = 'khongphuhop'
 
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📅 Tải danh sách ứng viên đã đánh giá",
-                    data=csv,
-                    file_name='cv_filtered_results.csv',
-                    mime='text/csv',
-                )
+            if st.session_state['view_page'] == 'phuhop':
+                df_show = df[df['Kết quả'] == "Phù hợp"]
+                st.subheader(f"✅ Danh sách ứng viên phù hợp ({len(df_show)})")
+            else:
+                df_show = df[df['Kết quả'] == "Không phù hợp"]
+                st.subheader(f"❌ Danh sách ứng viên không phù hợp ({len(df_show)})")
+
+            if df_show.empty:
+                st.warning("Không có ứng viên trong danh sách này.")
+            else:
+                df_show = df_show.copy()
+                df_show.index = range(1, len(df_show) + 1)
+                st.dataframe(df_show)
 
                 st.subheader("🔍 Xem chi tiết từng CV")
-                selected_file = st.selectbox("Chọn một file CV để xem chi tiết:", df['Tên file'].tolist())
+                selected_file = st.selectbox("Chọn một file CV để xem chi tiết:", df_show['Tên file'].tolist())
 
                 if selected_file:
                     selected_path = next((path for path in uploaded_paths if os.path.basename(path) == selected_file), None)
@@ -294,9 +354,8 @@ def main():
                         text = extract_text_from_pdf(selected_path)
                         if text:
                             st.markdown(f"### 📄 Phân tích chi tiết CV: `{selected_file}`")
-                            display_pdf(selected_path)  # Hiển thị PDF ngay sau thông tin cơ bản
+                            display_pdf(selected_path)
 
-                            # Thông tin cơ bản
                             st.markdown(
                                 """
                                 <div style="background-color: #1e293b; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
@@ -310,13 +369,12 @@ def main():
                                     selected_file,
                                     extract_name(text),
                                     target_field,
-                                    df.loc[df['Tên file'] == selected_file, 'Phần trăm phù hợp'].values[0],
-                                    df.loc[df['Tên file'] == selected_file, 'Kết quả'].values[0]
+                                    df_show.loc[df_show['Tên file'] == selected_file, 'Phần trăm phù hợp'].values[0],
+                                    df_show.loc[df_show['Tên file'] == selected_file, 'Kết quả'].values[0]
                                 ),
                                 unsafe_allow_html=True
                             )
 
-                            # Kỹ năng hiện có
                             present_skills = extract_present_skills(text)
                             st.markdown("### 🛠️ Kỹ năng CV hiện có")
                             st.markdown(
@@ -325,7 +383,6 @@ def main():
                                 unsafe_allow_html=True
                             )
 
-                            # Kỹ năng phù hợp, còn thiếu, trong project
                             candidate_skills = extract_skills_list(text)
                             project_skills = extract_skills_from_projects(text)
                             total_skills = list(set(candidate_skills + project_skills))
@@ -354,119 +411,6 @@ def main():
                                 if project_skills else "Không rõ",
                                 unsafe_allow_html=True
                             )
-
-        elif sample_cv_file and uploaded_files:
-            sample_cv_path = save_uploadedfile(sample_cv_file)
-            sample_cv_text = extract_text_from_pdf(sample_cv_path)
-            expected_skills = extract_skills_list(sample_cv_text)
-            target_field, confidence = predict_field(sample_cv_text)
-
-            # Kiểm tra lĩnh vực tiêu chí và độ tin cậy
-            if target_field not in FIELDS or confidence < 0.5:
-                st.error(f"❌ CV tiêu chí không thuộc lĩnh vực IT hoặc độ tin cậy thấp (xác suất: {confidence:.2f}). Vui lòng chọn đúng CV tiêu chí!")
-                return
-
-            uploaded_paths = [save_uploadedfile(uploaded_file) for uploaded_file in uploaded_files]
-            st.success(f"✅ Đã upload {len(uploaded_files)} CV ứng viên.")
-
-            with st.spinner("🔎 Đang tiến hành phân tích CV..."):
-                my_bar = st.progress(0)
-                df = analyze_cvs(uploaded_paths, expected_skills, target_field)
-                my_bar.progress(1.0)
-
-            st.subheader("📊 Tóm tắt kết quả")
-            st.success(f"✅ Đã phân tích {len(df)} CV hợp lệ trên tổng số {len(uploaded_files)} CV.")
-
-            if df.empty or all(df['Kết quả'] == "Không phù hợp"):
-                st.warning("⚠️ Không có CV nào phù hợp với tiêu chí.")
-            else:
-                st.subheader("📋 Danh sách ứng viên phù hợp")
-                df.index = df.index + 1
-                st.dataframe(df)
-
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📅 Tải danh sách ứng viên đã đánh giá",
-                    data=csv,
-                    file_name='cv_filtered_results.csv',
-                    mime='text/csv',
-                )
-
-                st.subheader("🔍 Xem chi tiết từng CV")
-                selected_file = st.selectbox("Chọn một file CV để xem chi tiết:", df['Tên file'].tolist())
-
-                if selected_file:
-                    selected_path = next((path for path in uploaded_paths if os.path.basename(path) == selected_file), None)
-                    if selected_path:
-                        text = extract_text_from_pdf(selected_path)
-                        if text:
-                            st.markdown(f"### 📄 Phân tích chi tiết CV: `{selected_file}`")
-                            display_pdf(selected_path)  # Hiển thị PDF ngay sau thông tin cơ bản
-
-                            # Thông tin cơ bản
-                            st.markdown(
-                                """
-                                <div style="background-color: #1e293b; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
-                                    <p><strong>Tên file:</strong> {}</p>
-                                    <p><strong>Tên ứng viên:</strong> {}</p>
-                                    <p><strong>Mảng IT:</strong> {}</p>
-                                    <p><strong>Phần trăm phù hợp:</strong> {}%</p>
-                                    <p><strong>Kết quả:</strong> {}</p>
-                                </div>
-                                """.format(
-                                    selected_file,
-                                    extract_name(text),
-                                    target_field,
-                                    df.loc[df['Tên file'] == selected_file, 'Phần trăm phù hợp'].values[0],
-                                    df.loc[df['Tên file'] == selected_file, 'Kết quả'].values[0]
-                                ),
-                                unsafe_allow_html=True
-                            )
-
-                            # Kỹ năng hiện có
-                            present_skills = extract_present_skills(text)
-                            st.markdown("### 🛠️ Kỹ năng CV hiện có")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in present_skills) + "</ul>"
-                                if present_skills else "Không rõ",
-                                unsafe_allow_html=True
-                            )
-
-                            # Kỹ năng phù hợp, còn thiếu, trong project
-                            candidate_skills = extract_skills_list(text)
-                            project_skills = extract_skills_from_projects(text)
-                            total_skills = list(set(candidate_skills + project_skills))
-                            matched, missing, skill_coverage = match_skills_accurately(total_skills, expected_skills, project_skills)
-
-                            st.markdown("### 📊 Tỉ lệ phù hợp")
-                            st.markdown(f"- **Tổng**: {skill_coverage}%")
-
-                            st.markdown("### ✅ Kỹ năng phù hợp")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in matched) + "</ul>"
-                                if matched else "Không rõ",
-                                unsafe_allow_html=True
-                            )
-
-                            st.markdown("### ❌ Kỹ năng còn thiếu")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in missing) + "</ul>"
-                                if missing else "Không rõ",
-                                unsafe_allow_html=True
-                            )
-
-                            st.markdown("### 📂 Kỹ năng trong project")
-                            st.markdown(
-                                "<ul>" + "".join(f"<li>{skill}</li>" for skill in project_skills) + "</ul>"
-                                if project_skills else "Không rõ",
-                                unsafe_allow_html=True
-                            )
-
-            # Lưu lại kết quả vào session_state để không bị mất khi chuyển menu
-            st.session_state['last_df'] = df
-            st.session_state['uploaded_paths'] = uploaded_paths
-            st.session_state['expected_skills'] = expected_skills
-            st.session_state['target_field'] = target_field
 
     elif menu == "Dashboard báo cáo":
         st.header("📊 Dashboard Báo cáo & Phân tích Kết quả")
@@ -480,11 +424,9 @@ def main():
             st.info("Đang dùng dữ liệu kết quả vừa phân tích.")
 
         if df is not None and not df.empty:
-            # Hiển thị bảng dữ liệu
             st.subheader("📋 Dữ liệu phân tích CV")
             st.dataframe(df)
 
-            # Thống kê tổng quan
             total_cv = len(df)
             suitable_cv = len(df[df['Kết quả'] == "Phù hợp"])
             unsuitable_cv = total_cv - suitable_cv
@@ -497,16 +439,14 @@ def main():
             col3.metric("Số CV không phù hợp", unsuitable_cv)
             col4.metric("Tỉ lệ kỹ năng phù hợp TB", f"{avg_skill_coverage:.2f}%")
 
-            # Biểu đồ phân bố tỉ lệ phù hợp
             st.subheader("📈 Phân bố tỉ lệ phù hợp")
-            fig, ax = plt.subplots(figsize=(8, 4)) # Đặt kích thước biểu đồ
+            fig, ax = plt.subplots(figsize=(8, 4))
             ax.hist(df['Phần trăm phù hợp'], bins=10, color='skyblue', edgecolor='black')
             ax.set_title("Phân bố tỉ lệ phù hợp")
             ax.set_xlabel("Tỉ lệ phù hợp (%)")
             ax.set_ylabel("Số lượng CV")
             st.pyplot(fig)
 
-            # Biểu đồ kỹ năng phổ biến
             st.subheader("🛠️ Kỹ năng phổ biến trong CV")
             all_skills = []
             for skills in df['Kỹ năng hiện có']:
@@ -516,7 +456,6 @@ def main():
             skill_df = pd.DataFrame(skill_counts.items(), columns=["Kỹ năng", "Số lượng"]).sort_values(by="Số lượng", ascending=False)
             st.bar_chart(skill_df.set_index("Kỹ năng"))
 
-            # Kỹ năng còn thiếu phổ biến
             st.subheader("❌ Kỹ năng còn thiếu phổ biến")
             all_missing_skills = []
             for skills in df['Kỹ năng còn thiếu']:
@@ -526,7 +465,6 @@ def main():
             missing_skill_df = pd.DataFrame(missing_skill_counts.items(), columns=["Kỹ năng", "Số lượng"]).sort_values(by="Số lượng", ascending=False)
             st.write(missing_skill_df)
 
-            # Tải xuống dữ liệu
             st.subheader("📥 Tải xuống dữ liệu")
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
