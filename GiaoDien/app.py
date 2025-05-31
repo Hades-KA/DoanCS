@@ -42,6 +42,19 @@ st.markdown("""
     .stDataFrame { background-color: #23272f; }
     .metric-label, .metric-value { color: #00d4ff !important; }
     .stProgress > div > div > div > div { background-image: linear-gradient(90deg,#00d4ff,#1e90ff); }
+
+    /* Nút xóa tất cả CV ứng viên */
+    .st-key-xoa_cv button {
+        background: #ff4d4f !important;
+        color: #fff !important;
+        border: none !important;
+    }
+    /* Nút danh sách ứng viên không phù hợp */
+    .st-key-khongphuhop button {
+        background: #ff7875 !important;
+        color: #fff !important;
+        border: none !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -114,21 +127,45 @@ def extract_skills_list(text):
             skills.append(skill)
     return skills
 
-# --- Trích xuất kỹ năng từ dự án ---
+# --- Trích xuất kỹ năng từ dự án (cải tiến) ---
 def extract_skills_from_projects(text):
-    sections = re.findall(r"(?i)(project|dự án)[^\n]*\n+(.*?)(?=\n{2,}|\Z)", text, re.DOTALL)
-    all_skills = set()
-    for _, section in sections:
-        lines = section.split('\n')
-        for line in lines:
-            if any(kw in line.lower() for kw in ['stack', 'tech', 'technology', 'tools', 'framework', 'sử dụng']):
-                items = re.split(r'[:,]', line)
-                if len(items) > 1:
-                    for part in re.split(r'[,/•]', items[1]):
-                        skill = part.strip(" -•()")
-                        if 1 < len(skill) <= 30:
-                            all_skills.add(skill)
-    return sorted(all_skills)
+    project_skills = set()
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        # Nếu dòng chứa từ khóa kỹ năng
+        if any(kw in line_lower for kw in ['tech stack', 'technology', 'tools', 'framework', 'sử dụng', 'environment', 'library', 'ngôn ngữ']):
+            items = re.split(r"[:\-]", line, maxsplit=1)
+            if len(items) > 1:
+                for skill in re.split(r'[,/•;]', items[1]):
+                    skill = skill.strip(" -•()")
+                    if 1 < len(skill) <= 40:
+                        project_skills.add(skill)
+        else:
+            # Nếu không có từ khóa, tìm kỹ năng phổ biến xuất hiện trong dòng mô tả dự án
+            for skill in COMMON_SKILLS:
+                if skill in line_lower:
+                    project_skills.add(skill)
+    return sorted(project_skills)
+
+# --- Trích xuất tên dự án (cải tiến) ---
+def extract_project_names(text):
+    project_names = []
+    lines = text.split('\n')
+    for line in lines:
+        line_strip = line.strip()
+        # Loại bỏ các tiêu đề lớn
+        if re.match(r"^(work|project|experience|notable|personal|projects?)\b", line_strip, re.IGNORECASE):
+            continue
+        # Nhận diện tên dự án dạng Project 1: Tên, Project: Tên, Dự án: Tên, ...
+        if re.match(r"^(project\s*\d*|dự án|project name|tên dự án)\s*[:\-]", line_strip, re.IGNORECASE):
+            name = re.split(r"[:\-]", line_strip, maxsplit=1)[-1].strip()
+            if 3 < len(name) < 80:
+                project_names.append(name)
+        # Nhận diện các dòng có thể là tên dự án (viết hoa đầu, không quá dài, không có dấu chấm câu lớn)
+        elif 3 < len(line_strip) < 80 and not any(x in line_strip.lower() for x in ["experience", "project", "work"]) and line_strip[0].isupper():
+            project_names.append(line_strip)
+    return list(dict.fromkeys(project_names))
 
 # --- So khớp kỹ năng ---
 def normalize_skill(skill):
@@ -188,6 +225,7 @@ def process_cv(file_path, expected_skills, target_field):
         name = extract_name(text)
         candidate_skills = extract_skills_list(text)
         project_skills = extract_skills_from_projects(text)
+        project_names = extract_project_names(text)
         total_skills = list(set(candidate_skills + project_skills))
         matched, missing, skill_coverage = match_skills_accurately(total_skills, expected_skills, project_skills)
         present_skills = extract_present_skills(text)
@@ -201,6 +239,7 @@ def process_cv(file_path, expected_skills, target_field):
             'Kỹ năng hiện có': ', '.join(present_skills),
             'Kỹ năng phù hợp': ', '.join(matched),
             'Kỹ năng còn thiếu': ', '.join(missing),
+            'Dự án trong project': ', '.join(project_names),
             'Kỹ năng trong project': ', '.join(project_skills)
         }
     return None
@@ -287,7 +326,7 @@ def main():
         # --- Xử lý upload các CV ứng viên ---
         if st.session_state['uploaded_paths']:
             st.success(f"Đã upload {len(st.session_state['uploaded_paths'])} CV ứng viên.")
-            if st.button("Xóa tất cả CV ứng viên"):
+            if st.button("Xóa tất cả CV ứng viên", key="xoa_cv"):
                 st.session_state['uploaded_paths'] = []
         else:
             uploaded_files = st.file_uploader("📅 Tải lên các CV ứng viên", type=["pdf"], accept_multiple_files=True, key="uploaded_files")
@@ -328,7 +367,7 @@ def main():
                 if st.button("📋 Danh sách ứng viên phù hợp"):
                     st.session_state['view_page'] = 'phuhop'
             with col2:
-                if st.button("📋 Danh sách ứng viên không phù hợp"):
+                if st.button("📋 Danh sách ứng viên không phù hợp", key="khongphuhop"):
                     st.session_state['view_page'] = 'khongphuhop'
 
             if st.session_state['view_page'] == 'phuhop':
@@ -353,7 +392,7 @@ def main():
                     if selected_path:
                         text = extract_text_from_pdf(selected_path)
                         if text:
-                            # ==== So sánh CV tiêu chí và CV ứng viên (gọn, có icon) ====
+                            # ==== So sánh CV tiêu chí và CV ứng viên  ====
                             criteria_text = extract_text_from_pdf(st.session_state['sample_cv_path'])
                             criteria_name = extract_name(criteria_text)
                             criteria_skills = extract_skills_list(criteria_text)
@@ -362,6 +401,7 @@ def main():
                             candidate_name = extract_name(text)
                             candidate_skills = extract_skills_list(text)
                             project_skills = extract_skills_from_projects(text)
+                            project_names = extract_project_names(text)
                             matched, missing, skill_coverage = match_skills_accurately(candidate_skills + project_skills, criteria_skills, project_skills)
                             result = df_show.loc[df_show['Tên file'] == selected_file].iloc[0]
 
@@ -378,19 +418,35 @@ def main():
                             with colB:
                                 st.markdown(f"""
                                 <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px;">
-                                <h3 style="color:#fff;margin-bottom:10px;">👤 <b>Chi tiết ứng viên: {candidate_name}</b></h3>
+                                <h3 style="color:#fff;margin-bottom:10px;">👤 <b>CV ứng viên: {candidate_name}</b></h3>
                                 <b>📄 Tên file:</b> {selected_file}<br>
                                 <b>💼 Mảng IT:</b> {result['Mảng IT']}<br>
                                 <b>📊 Phần trăm phù hợp:</b> {result['Phần trăm phù hợp']}%<br>
                                 <b>✅ Kết quả:</b> {result['Kết quả']}<br>
                                 <b>🟢 Kỹ năng phù hợp:</b> {', '.join(matched) if matched else 'Không rõ'}<br>
                                 <b>🔴 Kỹ năng còn thiếu:</b> {', '.join(missing) if missing else 'Không rõ'}<br>
-                                <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}                                </div>
+                                <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}
+                                </div>
                                 """, unsafe_allow_html=True)
 
                             # ==== Phân tích chi tiết CV ====
                             st.markdown(f"### 📄 Phân tích chi tiết CV: `{selected_file}`")
                             display_pdf(selected_path)
+
+                            # Thông tin phân tích sâu hơn
+                            st.markdown(f"""
+                            <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px; margin-bottom:20px;">
+                                <h4 style="color:#fff;margin-bottom:10px;">🔎 <b>Phân tích chi tiết ứng viên</b></h4>
+                                <b>👤 Tên ứng viên:</b> {candidate_name}<br>
+                                <b>💼 Mảng IT:</b> {result['Mảng IT']}<br>
+                                <b>📊 Phần trăm phù hợp:</b> <span style="color:#00d4ff;font-weight:bold;">{result['Phần trăm phù hợp']}%</span><br>
+                                <b>✅ Kết quả:</b> <span style="color:{'#28a745' if result['Kết quả']=='Phù hợp' else '#dc3545'};font-weight:bold;">{result['Kết quả']}</span><br>
+                                <b>📝 Kỹ năng hiện có trong CV:</b> {', '.join(candidate_skills) if candidate_skills else 'Không rõ'}<br>
+                                <b>🟢 Kỹ năng phù hợp ({len(matched)}):</b> {', '.join(matched) if matched else 'Không rõ'}<br>
+                                <b>🔴 Kỹ năng còn thiếu ({len(missing)}):</b> {', '.join(missing) if missing else 'Không rõ'}<br>
+                                <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}
+                            </div>
+                            """, unsafe_allow_html=True)
 
     elif menu == "Dashboard báo cáo":
         st.header("📊 Dashboard Báo cáo & Phân tích Kết quả")
