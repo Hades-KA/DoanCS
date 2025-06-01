@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Hệ thống Hỗ trợ Tuyển dụng bằng AI", layout="wide")
+st.set_page_config(page_title="Hệ thống Hỗ trợ quản lý tuyển dụng ", layout="wide")
 
 import os
 import pdfplumber
@@ -285,7 +285,7 @@ def main():
             }
         )
 
-    st.title("📄 Hệ thống Hỗ trợ Quản lý Tuyển dụng bằng AI")
+    st.title("📄 Hệ thống hỗ trợ quản lý tuyển dụng ")
 
     # --- Khởi tạo session_state ---
     if 'last_df' not in st.session_state:
@@ -315,6 +315,9 @@ def main():
                 st.session_state['sample_cv_path'] = None
                 st.session_state['expected_skills'] = []
                 st.session_state['target_field'] = ""
+                st.session_state['last_df'] = None
+                st.session_state['cv_valid_count'] = 0
+                st.session_state['cv_invalid_count'] = 0
         else:
             sample_cv_file = st.file_uploader("📌 Tải lên CV tiêu chí", type="pdf", key="sample_cv_file")
             if sample_cv_file:
@@ -328,6 +331,9 @@ def main():
             st.success(f"Đã upload {len(st.session_state['uploaded_paths'])} CV ứng viên.")
             if st.button("Xóa tất cả CV ứng viên", key="xoa_cv"):
                 st.session_state['uploaded_paths'] = []
+                st.session_state['last_df'] = None
+                st.session_state['cv_valid_count'] = 0
+                st.session_state['cv_invalid_count'] = 0
         else:
             uploaded_files = st.file_uploader("📅 Tải lên các CV ứng viên", type=["pdf"], accept_multiple_files=True, key="uploaded_files")
             if uploaded_files:
@@ -421,8 +427,8 @@ def main():
                                 <h3 style="color:#fff;margin-bottom:10px;">👤 <b>CV ứng viên: {candidate_name}</b></h3>
                                 <b>📄 Tên file:</b> {selected_file}<br>
                                 <b>💼 Mảng IT:</b> {result['Mảng IT']}<br>
-                                <b>📊 Phần trăm phù hợp:</b> {result['Phần trăm phù hợp']}%<br>
-                                <b>✅ Kết quả:</b> {result['Kết quả']}<br>
+                                <b>📊 Phần trăm phù hợp:</b> <span style="color:#00d4ff;font-weight:bold;">{result['Phần trăm phù hợp']}%</span><br>
+                                <b>✅ Kết quả:</b> <span style="color:{'#28a745' if result['Kết quả']=='Phù hợp' else '#dc3545'};font-weight:bold;">{result['Kết quả']}</span><br>
                                 <b>🟢 Kỹ năng phù hợp:</b> {', '.join(matched) if matched else 'Không rõ'}<br>
                                 <b>🔴 Kỹ năng còn thiếu:</b> {', '.join(missing) if missing else 'Không rõ'}<br>
                                 <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}
@@ -430,23 +436,8 @@ def main():
                                 """, unsafe_allow_html=True)
 
                             # ==== Phân tích chi tiết CV ====
-                            st.markdown(f"### 📄 Phân tích chi tiết CV: `{selected_file}`")
+                            st.markdown(f"### 📄 CV ứng viên: `{selected_file}`")
                             display_pdf(selected_path)
-
-                            # Thông tin phân tích sâu hơn
-                            st.markdown(f"""
-                            <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px; margin-bottom:20px;">
-                                <h4 style="color:#fff;margin-bottom:10px;">🔎 <b>Phân tích chi tiết ứng viên</b></h4>
-                                <b>👤 Tên ứng viên:</b> {candidate_name}<br>
-                                <b>💼 Mảng IT:</b> {result['Mảng IT']}<br>
-                                <b>📊 Phần trăm phù hợp:</b> <span style="color:#00d4ff;font-weight:bold;">{result['Phần trăm phù hợp']}%</span><br>
-                                <b>✅ Kết quả:</b> <span style="color:{'#28a745' if result['Kết quả']=='Phù hợp' else '#dc3545'};font-weight:bold;">{result['Kết quả']}</span><br>
-                                <b>📝 Kỹ năng hiện có trong CV:</b> {', '.join(candidate_skills) if candidate_skills else 'Không rõ'}<br>
-                                <b>🟢 Kỹ năng phù hợp ({len(matched)}):</b> {', '.join(matched) if matched else 'Không rõ'}<br>
-                                <b>🔴 Kỹ năng còn thiếu ({len(missing)}):</b> {', '.join(missing) if missing else 'Không rõ'}<br>
-                                <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}
-                            </div>
-                            """, unsafe_allow_html=True)
 
     elif menu == "Dashboard báo cáo":
         st.header("📊 Dashboard Báo cáo & Phân tích Kết quả")
