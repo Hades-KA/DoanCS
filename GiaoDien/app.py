@@ -1,7 +1,11 @@
 import streamlit as st
+import os
 st.set_page_config(page_title="Hệ thống Hỗ trợ quản lý tuyển dụng ", layout="wide")
 
-import os
+# --- Nhúng CSS từ file style.css ---
+with open(os.path.join(os.path.dirname(__file__), "style.css"), encoding="utf-8") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 import pdfplumber
 import re
 import base64
@@ -13,7 +17,7 @@ from streamlit_option_menu import option_menu
 import unicodedata
 import matplotlib.pyplot as plt
 from collections import Counter
-
+import plotly.graph_objects as go
 # --- Danh sách kỹ năng lập trình phổ biến ---
 COMMON_SKILLS = [
     "javascript", "typescript", "reactjs", "redux", "tailwindcss", "java", "spring boot", "spring", "spring framework",
@@ -29,34 +33,6 @@ def extract_present_skills(text):
         if skill in text_lower and skill not in present_skills:
             present_skills.append(skill)
     return present_skills
-
-# --- CSS tuỳ chỉnh ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #181c24; }
-    .css-1d391kg, .css-1v0mbdj, .css-1cypcdb { color: #00d4ff !important; }
-    .stSidebar { background: #23272f; }
-    .sidebar-title { color: #00d4ff; font-size: 22px; font-weight: bold; text-align: center; }
-    .sidebar-desc { color: #aaa; font-size: 14px; text-align: center; }
-    .stButton>button, .stDownloadButton>button { background: linear-gradient(90deg,#00d4ff,#1e90ff); color: white; }
-    .stDataFrame { background-color: #23272f; }
-    .metric-label, .metric-value { color: #00d4ff !important; }
-    .stProgress > div > div > div > div { background-image: linear-gradient(90deg,#00d4ff,#1e90ff); }
-
-    /* Nút xóa tất cả CV ứng viên */
-    .st-key-xoa_cv button {
-        background: #ff4d4f !important;
-        color: #fff !important;
-        border: none !important;
-    }
-    /* Nút danh sách ứng viên không phù hợp */
-    .st-key-khongphuhop button {
-        background: #ff7875 !important;
-        color: #fff !important;
-        border: none !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # 📅 Thư mục lưu CV
 UPLOAD_FOLDER = './uploaded_cvs/'
@@ -99,15 +75,13 @@ def extract_text_from_pdf(file_path):
 def extract_name(text):
     lines = text.strip().split("\n")
     for line in lines[:10]:
-        for line in lines[:30]:
-            if re.search(r"(Name|Tên):", line, re.IGNORECASE):
-                return line.split(":")[-1].strip()
+        if re.search(r"(Name|Tên):", line, re.IGNORECASE):
+            return line.split(":")[-1].strip()
     for line in lines[:10]:
-        for line in lines[:30]:
-            if len(line.split()) >= 2 and line[0].isupper():
-                if not any(char.isdigit() for char in line) and len(line.split()) <= 5 and not any(kw in line.lower() for kw in ["contact", "information"]):
-                    if not any(char.isdigit() for char in line) and len(line.split()) <= 5:
-                        return line.strip()
+        if len(line.split()) >= 2 and line[0].isupper():
+            if not any(char.isdigit() for char in line) and len(line.split()) <= 5 and not any(kw in line.lower() for kw in ["contact", "information"]):
+                if not any(char.isdigit() for char in line) and len(line.split()) <= 5:
+                    return line.strip()
     return "Không rõ"
 
 # --- Phân loại lĩnh vực, trả về cả score ---
@@ -274,8 +248,8 @@ def main():
         st.markdown("<div class='sidebar-desc'>Tối ưu hóa quy trình tuyển dụng, lọc CV ứng viên tự động bằng AI.<br>Tiết kiệm thời gian, nâng cao hiệu quả!</div>", unsafe_allow_html=True)
         menu = option_menu(
             None,
-            ["Phân tích CV", "Dashboard báo cáo"],
-            icons=["file-earmark-text", "bar-chart"],
+            ["Phân tích CV", "So sánh CV", "Phần trăm phù hợp", "Dashboard báo cáo"],
+            icons=["file-earmark-text", "files", "bar-chart-line", "bar-chart"],
             menu_icon="cast", default_index=0,
             styles={
                 "container": {"padding": "5px", "background-color": "#222"},
@@ -365,8 +339,6 @@ def main():
         if st.session_state['last_df'] is not None and len(st.session_state['last_df']) > 0:
             df = st.session_state['last_df']
             uploaded_paths = st.session_state['uploaded_paths']
-            expected_skills = st.session_state['expected_skills']
-            target_field = st.session_state['target_field']
 
             col1, col2 = st.columns(2)
             with col1:
@@ -390,54 +362,195 @@ def main():
                 df_show.index = range(1, len(df_show) + 1)
                 st.dataframe(df_show)
 
-                st.subheader("🔍 Xem chi tiết từng CV")
-                selected_file = st.selectbox("Chọn một file CV để xem chi tiết:", df_show['Tên file'].tolist())
+    elif menu == "So sánh CV":
+        st.header("🔍 So sánh CV")
 
-                if selected_file:
-                    selected_path = next((path for path in uploaded_paths if os.path.basename(path) == selected_file), None)
-                    if selected_path:
-                        text = extract_text_from_pdf(selected_path)
-                        if text:
-                            # ==== So sánh CV tiêu chí và CV ứng viên  ====
-                            criteria_text = extract_text_from_pdf(st.session_state['sample_cv_path'])
-                            criteria_name = extract_name(criteria_text)
-                            criteria_skills = extract_skills_list(criteria_text)
-                            criteria_field = st.session_state['target_field']
+        # Kiểm tra xem đã phân tích CV chưa
+        if 'last_df' not in st.session_state or st.session_state['last_df'] is None or len(st.session_state['last_df']) == 0:
+            st.warning("Vui lòng phân tích CV trước tại mục 'Phân tích CV'!")
+        else:
+            df = st.session_state['last_df']
+            uploaded_paths = st.session_state['uploaded_paths']
+            expected_skills = st.session_state['expected_skills']
+            target_field = st.session_state['target_field']
 
-                            candidate_name = extract_name(text)
-                            candidate_skills = extract_skills_list(text)
-                            project_skills = extract_skills_from_projects(text)
-                            project_names = extract_project_names(text)
-                            matched, missing, skill_coverage = match_skills_accurately(candidate_skills + project_skills, criteria_skills, project_skills)
-                            result = df_show.loc[df_show['Tên file'] == selected_file].iloc[0]
+            # Lọc danh sách CV phù hợp (phần trăm phù hợp >= 50%)
+            suitable_df = df[df['Kết quả'] == "Phù hợp"]
 
-                            colA, colB = st.columns(2)
-                            with colA:
-                                st.markdown(f"""
-                                <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px;">
-                                <h3 style="color:#fff;margin-bottom:10px;">📝 <b>CV tiêu chí</b></h3>
-                                <b>🛠️ Kỹ năng yêu cầu:</b> {', '.join(criteria_skills)}<br>
-                                <b>💼 Lĩnh vực IT:</b> {criteria_field}
-                                </div>
-                                """, unsafe_allow_html=True)
+            if len(suitable_df) == 0:
+                st.warning("Không có CV nào phù hợp để so sánh. Vui lòng kiểm tra lại kết quả phân tích!")
+            else:
+                # Lựa chọn CV để so sánh từ danh sách CV phù hợp
+                if 'selected_cvs' not in st.session_state:
+                    st.session_state['selected_cvs'] = []
 
-                            with colB:
-                                st.markdown(f"""
-                                <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px;">
-                                <h3 style="color:#fff;margin-bottom:10px;">👤 <b>CV ứng viên: {candidate_name}</b></h3>
-                                <b>📄 Tên file:</b> {selected_file}<br>
-                                <b>💼 Mảng IT:</b> {result['Mảng IT']}<br>
-                                <b>📊 Phần trăm phù hợp:</b> <span style="color:#00d4ff;font-weight:bold;">{result['Phần trăm phù hợp']}%</span><br>
-                                <b>✅ Kết quả:</b> <span style="color:{'#28a745' if result['Kết quả']=='Phù hợp' else '#dc3545'};font-weight:bold;">{result['Kết quả']}</span><br>
-                                <b>🟢 Kỹ năng phù hợp:</b> {', '.join(matched) if matched else 'Không rõ'}<br>
-                                <b>🔴 Kỹ năng còn thiếu:</b> {', '.join(missing) if missing else 'Không rõ'}<br>
-                                <b>📁 Kỹ năng trong project:</b> {', '.join(project_skills) if project_skills else 'Không rõ'}
-                                </div>
-                                """, unsafe_allow_html=True)
+                selected_cvs = st.multiselect(
+                    "Chọn CV phù hợp để so sánh:",
+                    suitable_df['Tên file'].tolist(),
+                    default=st.session_state['selected_cvs']
+                )
 
-                            # ==== Phân tích chi tiết CV ====
-                            st.markdown(f"### 📄 CV ứng viên: `{selected_file}`")
-                            display_pdf(selected_path)
+                st.session_state['selected_cvs'] = selected_cvs
+
+                if len(selected_cvs) < 2:
+                    st.info("Vui lòng chọn ít nhất 2 CV để so sánh.")
+                else:
+                    # Tạo bảng so sánh
+                    comparison_data = {
+                        "Tiêu chí": [
+                            "Tên ứng viên",
+                            "Tên file",
+                            "Mảng IT",
+                            "Phần trăm phù hợp",
+                            "Kết quả",
+                            "Kỹ năng phù hợp",
+                            "Kỹ năng còn thiếu",
+                            "Kỹ năng trong project"
+                        ]
+                    }
+
+                    # Lấy thông tin chi tiết của từng CV
+                    cv_details = []
+                    for selected_file in selected_cvs:
+                        selected_path = next((path for path in uploaded_paths if os.path.basename(path) == selected_file), None)
+                        if selected_path:
+                            text = extract_text_from_pdf(selected_path)
+                            if text:
+                                candidate_name = extract_name(text)
+                                candidate_skills = extract_skills_list(text)
+                                project_skills = extract_skills_from_projects(text)
+                                project_names = extract_project_names(text)
+                                matched, missing, skill_coverage = match_skills_accurately(candidate_skills + project_skills, expected_skills, project_skills)
+                                result = df.loc[df['Tên file'] == selected_file].iloc[0]
+
+                                cv_details.append({
+                                    'Tên file': selected_file,
+                                    'Tên ứng viên': candidate_name,
+                                    'Mảng IT': result['Mảng IT'],
+                                    'Phần trăm phù hợp': result['Phần trăm phù hợp'],
+                                    'Phần trăm phù hợp_raw': f"{result['Phần trăm phù hợp']}%",
+                                    'Kết quả': result['Kết quả'],
+                                    'Kỹ năng phù hợp': ', '.join(matched) if matched else 'Không rõ',
+                                    'Kỹ năng còn thiếu': ', '.join(missing) if missing else 'Không rõ',
+                                    'Kỹ năng trong project': ', '.join(project_skills) if project_skills else 'Không rõ',
+                                    'Path': selected_path
+                                })
+
+                    # Điền dữ liệu vào bảng so sánh với highlight
+                    for i, cv in enumerate(cv_details):
+                        # Highlight Phần trăm phù hợp
+                        percentage = cv['Phần trăm phù hợp']
+                        percentage_str = cv['Phần trăm phù hợp_raw']
+                        if percentage >= 50:
+                            percentage_str = f"<div class='percentage-tooltip'><span class='highlight-suitable'>{percentage_str}</span><span class='tooltiptext'>Tỉ lệ kỹ năng phù hợp với yêu cầu công việc</span></div>"
+                        else:
+                            percentage_str = f"<div class='percentage-tooltip'><span class='highlight-unsuitable'>{percentage_str}</span><span class='tooltiptext'>Tỉ lệ kỹ năng phù hợp với yêu cầu công việc</span></div>"
+
+                        # Highlight Kết quả
+                        result = cv['Kết quả']
+                        if result == "Phù hợp":
+                            result = f"<span class='highlight-suitable'>{result}</span>"
+                        else:
+                            result = f"<span class='highlight-unsuitable'>{result}</span>"
+
+                        # Highlight Kỹ năng phù hợp
+                        matched_skills = cv['Kỹ năng phù hợp']
+                        if matched_skills != "Không rõ":
+                            matched_skills = f"<span class='highlight-skills-matched'>{matched_skills}</span>"
+
+                        # Highlight Kỹ năng còn thiếu
+                        missing_skills = cv['Kỹ năng còn thiếu']
+                        if missing_skills != "Không rõ":
+                            missing_skills = f"<span class='highlight-skills-missing'>{missing_skills}</span>"
+
+                        comparison_data[f"CV {i+1}"] = [
+                            cv['Tên ứng viên'],
+                            cv['Tên file'],
+                            cv['Mảng IT'],
+                            percentage_str,
+                            result,
+                            matched_skills,
+                            missing_skills,
+                            cv['Kỹ năng trong project']
+                        ]
+
+                    # Hiển thị bảng so sánh
+                    comparison_df = pd.DataFrame(comparison_data)
+
+                    # Hàm xử lý xóa CV
+                    def remove_cv(index):
+                        if 0 <= index < len(st.session_state['selected_cvs']):
+                            st.session_state['selected_cvs'].pop(index)
+                        st.rerun()  # Sử dụng st.rerun() thay vì st.experimental_rerun()
+
+                    # Thêm nút "Xóa" cho từng CV
+                    st.subheader("📊 Bảng so sánh CV")
+                    cols = st.columns([1] + [3] * len(selected_cvs))
+                    with cols[0]:
+                        st.write("")  # Cột đầu tiên để trống cho tiêu chí
+                    for i, (cv, col) in enumerate(zip(cv_details, cols[1:])):
+                        with col:
+                            st.write(f"**CV {i+1}: {cv['Tên ứng viên']}**")
+                            if st.button(f"Xóa CV {i+1}", key=f"remove_cv_{i}", help=f"Xóa CV {cv['Tên ứng viên']} khỏi bảng so sánh", on_click=lambda x=i: remove_cv(x)):
+                                pass  # Logic xóa được xử lý trong remove_cv
+
+                    # Thêm class CSS cho bảng
+                    html_table = comparison_df.set_index("Tiêu chí").to_html(escape=False, classes="comparison-table")
+                    st.markdown(html_table, unsafe_allow_html=True)
+
+                    # Hiển thị CV gốc
+                    st.subheader("📄 CV gốc của các ứng viên")
+                    for cv in cv_details:
+                        with st.expander(f"Xem CV gốc: {cv['Tên ứng viên']} ({cv['Tên file']})"):
+                            display_pdf(cv['Path'])
+
+    elif menu == "Phần trăm phù hợp":
+        st.header("📊 Phần trăm phù hợp")
+
+        # Kiểm tra xem đã phân tích CV chưa
+        if 'last_df' not in st.session_state or st.session_state['last_df'] is None or len(st.session_state['last_df']) == 0:
+            st.warning("Vui lòng phân tích CV trước tại mục 'Phân tích CV'!")
+        else:
+            df = st.session_state['last_df']
+
+            # Lọc danh sách CV phù hợp (phần trăm phù hợp >= 50%)
+            suitable_df = df[df['Kết quả'] == "Phù hợp"]
+
+            if len(suitable_df) == 0:
+                st.warning("Không có CV nào phù hợp để so sánh. Vui lòng kiểm tra lại kết quả phân tích!")
+            else:
+                # Lựa chọn nhiều CV để so sánh từ danh sách CV phù hợp
+                selected_files = st.multiselect("Chọn các CV phù hợp để xem tỷ lệ phần trăm:", suitable_df['Tên file'].tolist(), default=suitable_df['Tên file'].tolist()[:2], max_selections=5)
+
+                if len(selected_files) < 1:
+                    st.info("Vui lòng chọn ít nhất 1 CV để xem biểu đồ.")
+                else:
+                    # Tạo DataFrame chứa các CV được chọn
+                    comparison_df = suitable_df[suitable_df['Tên file'].isin(selected_files)][['Tên ứng viên', 'Phần trăm phù hợp']]
+                    comparison_df = comparison_df.reset_index(drop=True)
+                    comparison_df.index = range(1, len(comparison_df) + 1)
+
+                    # Hiển thị biểu đồ cột bằng Plotly
+                    st.subheader("📈 So sánh phần trăm phù hợp")
+                    fig = go.Figure(data=
+                        go.Bar(
+                            x=comparison_df['Tên ứng viên'],
+                            y=comparison_df['Phần trăm phù hợp'],
+                            marker_color=['#00d4ff', '#1e90ff', '#00b7eb', '#007bff', '#00aaff'][:len(selected_files)],
+                            text=comparison_df['Phần trăm phù hợp'],
+                            textposition='auto'
+                        )
+                    )
+                    fig.update_layout(
+                        title='So sánh phần trăm phù hợp',
+                        xaxis_title="Tên ứng viên",
+                        yaxis_title="Phần trăm phù hợp (%)",
+                        yaxis_range=[0, 100],
+                        plot_bgcolor='#181c24',
+                        paper_bgcolor='#181c24',
+                        font_color='#00d4ff'
+                    )
+                    st.plotly_chart(fig)
 
     elif menu == "Dashboard báo cáo":
         st.header("📊 Dashboard Báo cáo & Phân tích Kết quả")

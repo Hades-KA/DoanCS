@@ -1,0 +1,143 @@
+.stApp { background-color: #181c24; }
+.css-1d391kg, .css-1v0mbdj, .css-1cypcdb { color: #00d4ff !important; }
+.stSidebar { background: #23272f; }
+.sidebar-title { color: #00d4ff; font-size: 22px; font-weight: bold; text-align: center; }
+.sidebar-desc { color: #aaa; font-size: 14px; text-align: center; }
+.stButton>button, .stDownloadButton>button { background: linear-gradient(90deg,#00d4ff,#1e90ff); color: white; }
+.stDataFrame { background-color: #23272f; }
+.metric-label, .metric-value { color: #00d4ff !important; }
+.stProgress > div > div > div > div { background-image: linear-gradient(90deg,#00d4ff,#1e90ff); }
+
+/* Nút xóa tất cả CV ứng viên */
+.st-key-xoa_cv button {
+    background: #ff4d4f !important;
+    color: #fff !important;
+    border: none !important;
+}
+/* Nút danh sách ứng viên không phù hợp */
+.st-key-khongphuhop button {
+    background: #ff7875 !important;
+    color: #fff !important;
+    border: none !important;
+}
+/* Nút xóa CV trong So sánh CV */
+.remove-cv-button button {
+    background: #ff4d4f !important;
+    color: #fff !important;
+    border: none !important;
+    padding: 5px 10px !important;
+    font-size: 14px !important;
+}
+
+/* Cải thiện giao diện bảng so sánh */
+.comparison-table {
+    width: 100%;
+    max-width: 1400px;
+    table-layout: fixed;
+    border-collapse: collapse;
+    background-color: #23272f;
+    font-size: 18px;
+    color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    max-height: 600px;
+    overflow-x: auto;
+    overflow-y: auto;
+    /* Bỏ white-space: nowrap để nội dung xuống dòng */
+}
+.comparison-table th, .comparison-table td {
+    border: 1px solid #555;
+    padding: 10px 15px;
+    text-align: left;
+    overflow: hidden; /* Ẩn nội dung tràn */
+    text-overflow: ellipsis; /* Hiển thị dấu ... khi nội dung dài */
+    overflow-wrap: break-word; /* Đảm bảo xuống dòng nếu cần */
+    max-height: 100px; /* Giới hạn chiều cao tối đa của ô */
+    line-height: 1.5; /* Tăng khoảng cách dòng để dễ đọc */
+}
+.comparison-table th {
+    background-color: #1e90ff;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    border-radius: 8px 8px 0 0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.comparison-table tr:nth-child(even) {
+    background-color: #2a2e36;
+}
+.comparison-table tr:nth-child(odd) {
+    background-color: #23272f;
+}
+.comparison-table tr:hover {
+    background-color: rgba(30, 144, 255, 0.1);
+    transition: background-color 0.3s ease;
+}
+
+/* === Điều chỉnh chiều ngang cột === */
+.comparison-table td:first-child {
+    font-weight: bold;
+    color: #00d4ff;
+    width: 15%;
+    min-width: 120px;
+    max-width: 150px;
+    white-space: nowrap; /* Giữ cột tiêu chí không xuống dòng */
+}
+.comparison-table td:not(:first-child) {
+    min-width: 180px;
+}
+
+/* Căn giữa cho Phần trăm phù hợp và Kết quả */
+.comparison-table tr:nth-child(5) td:not(:first-child),
+.comparison-table tr:nth-child(6) td:not(:first-child) {
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* Tooltip cho Phần trăm phù hợp */
+.percentage-tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    text-align: center;
+}
+.percentage-tooltip .tooltiptext {
+    visibility: hidden;
+    width: 150px;
+    background-color: #1e90ff;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -75px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.percentage-tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Highlight kỹ năng */
+.highlight-suitable {
+    color: #FFC107 !important;
+    font-weight: bold !important;
+}
+.highlight-unsuitable {
+    color: #dc3545 !important;
+    font-weight: bold !important;
+}
+.highlight-skills-matched {
+    font-weight: bold !important;
+    color: #00d4ff !important;
+}
+.highlight-skills-missing {
+    color: #ff7875 !important;
+}
