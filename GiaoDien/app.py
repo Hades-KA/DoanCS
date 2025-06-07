@@ -18,6 +18,7 @@ import unicodedata
 import matplotlib.pyplot as plt
 from collections import Counter
 import plotly.graph_objects as go
+
 # --- Danh sách kỹ năng lập trình phổ biến ---
 COMMON_SKILLS = [
     "javascript", "typescript", "reactjs", "redux", "tailwindcss", "java", "spring boot", "spring", "spring framework",
@@ -413,20 +414,25 @@ def main():
                 elif len(selected_cvs) == 1:
                     st.info(f"Đã chọn 1 CV: {selected_cvs[0]}. Vui lòng chọn thêm ít nhất 1 CV nữa để so sánh.")
                 else:
-                    # Hiển thị thông tin CV tiêu chí với icon và không highlight
-                    st.subheader("📌 Tiêu chí tuyển dụng (CV tiêu chí)")
+                    # Hiển thị CV tiêu chí với màu cho kỹ năng
                     sample_cv_path = st.session_state['sample_cv_path']
                     if sample_cv_path:
                         sample_text = extract_text_from_pdf(sample_cv_path)
                         sample_skills = extract_skills_list(sample_text)
-                        st.markdown(f"- **Tên file**: {os.path.basename(sample_cv_path)}")
-                        st.markdown(f"- **Mảng IT**: {target_field}")
                         if sample_skills:
-                            st.markdown(f"- **📋 Kỹ năng yêu cầu**: {', '.join(sample_skills)}")
+                            skills_html = ", ".join([f'<span style="color: #FFD700;">{skill}</span>' for skill in sample_skills])
                         else:
-                            st.markdown("- **📋 Kỹ năng yêu cầu**: Không rõ")
+                            skills_html = "Không rõ"
+                        st.markdown(f"""
+                        <div style="background:#23272f;padding:18px 20px 18px 20px;border-radius:8px;">
+                            <h3 style="color:#fff;margin-bottom:10px;">📝 <b>CV tiêu chí</b></h3>
+                            <b>📄 Tên file:</b> {os.path.basename(sample_cv_path)}<br>
+                            <b>🛠️ Kỹ năng yêu cầu:</b> {skills_html}<br>
+                            <b>💼 Lĩnh vực IT:</b> {target_field}
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                    # Tạo bảng so sánh
+                    # Tạo và hiển thị bảng so sánh
                     comparison_data = {
                         "Tiêu chí": [
                             "Tên ứng viên",
@@ -500,34 +506,27 @@ def main():
                             cv['Kỹ năng trong project']
                         ]
 
-                    # Hiển thị bảng so sánh
-                    comparison_df = pd.DataFrame(comparison_data)
-
-                    # Hàm xử lý xóa CV
-                    def remove_cv(index):
-                        if 0 <= index < len(st.session_state['selected_cvs']):
-                            st.session_state['selected_cvs'].pop(index)
-                        st.rerun()
-
-                    # Thêm nút "Xóa" cho từng CV
+                    # Thêm khoảng trống và hiển thị bảng so sánh
+                    st.write("")
                     st.subheader("📊 Bảng so sánh CV")
                     cols = st.columns([1] + [3] * len(selected_cvs))
                     with cols[0]:
                         st.write("")  # Cột đầu tiên để trống cho tiêu chí
                     for i, (cv, col) in enumerate(zip(cv_details, cols[1:])):
                         with col:
-                            st.write(f"**CV {i+1}: {cv['Tên ứng viên']}**")
+                            st.write(f"**CV {i+1}: {cv['Tên ứng viên'] or 'Không rõ'}**")
                             if st.button(f"Xóa CV {i+1}", key=f"remove_cv_{i}", help=f"Xóa CV {cv['Tên ứng viên']} khỏi bảng so sánh", on_click=lambda x=i: remove_cv(x)):
-                                pass  # Logic xóa được xử lý trong remove_cv
+                                pass
 
                     # Thêm class CSS cho bảng
+                    comparison_df = pd.DataFrame(comparison_data)
                     html_table = comparison_df.set_index("Tiêu chí").to_html(escape=False, classes="comparison-table")
                     st.markdown(html_table, unsafe_allow_html=True)
 
-                    # Hiển thị CV gốc
+                    # Hiển thị CV gốc sau bảng so sánh
                     st.subheader("📄 CV gốc của các ứng viên")
                     for cv in cv_details:
-                        with st.expander(f"Xem CV gốc: {cv['Tên ứng viên']} ({cv['Tên file']})"):
+                        with st.expander(f"Xem CV gốc: {cv['Tên ứng viên'] or 'Không rõ'} ({cv['Tên file']})"):
                             display_pdf(cv['Path'])
 
     elif menu == "Phần trăm phù hợp":
@@ -638,6 +637,11 @@ def main():
             )
         else:
             st.info("Vui lòng tải lên file kết quả hoặc phân tích CV trước.")
+
+def remove_cv(index):
+    if 0 <= index < len(st.session_state['selected_cvs']):
+        st.session_state['selected_cvs'].pop(index)
+    st.rerun()
 
 if __name__ == "__main__":
     main()
