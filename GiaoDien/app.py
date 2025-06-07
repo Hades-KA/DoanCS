@@ -248,13 +248,13 @@ def main():
         st.markdown("<div class='sidebar-desc'>Tối ưu hóa quy trình tuyển dụng, lọc CV ứng viên tự động bằng AI.<br>Tiết kiệm thời gian, nâng cao hiệu quả!</div>", unsafe_allow_html=True)
         menu = option_menu(
             None,
-            ["Phân tích CV", "So sánh CV", "Phần trăm phù hợp", "Dashboard báo cáo"],
+            ["Tải lên và phân tích CV", "So sánh ứng viên", "Phần trăm phù hợp", "Báo cáo tổng quan"],
             icons=["file-earmark-text", "files", "bar-chart-line", "bar-chart"],
             menu_icon="cast", default_index=0,
             styles={
-                "container": {"padding": "5px", "background-color": "#222"},
+                "container": {"padding": "5px", "background-color": "transparent"},
                 "icon": {"color": "#00d4ff", "font-size": "20px"},
-                "nav-link": {"font-size": "16px", "text-align": "left", "margin":"2px", "--hover-color": "#1e90ff"},
+                "nav-link": {"font-size": "16px", "text-align": "left", "margin": "2px", "--hover-color": "#1e90ff"},
                 "nav-link-selected": {"background-color": "#1e90ff", "color": "white"},
             }
         )
@@ -278,9 +278,11 @@ def main():
         st.session_state['cv_invalid_count'] = 0
     if 'view_page' not in st.session_state:
         st.session_state['view_page'] = 'phuhop'
+    if 'selected_cvs' not in st.session_state:
+        st.session_state['selected_cvs'] = []
 
-    if menu == "Phân tích CV":
-        st.header("📄 Phân tích CV")
+    if menu == "Tải lên và phân tích CV":
+        st.header("📄 Tải lên và phân tích CV")
 
         # --- Xử lý upload CV tiêu chí ---
         if st.session_state['sample_cv_path']:
@@ -292,6 +294,7 @@ def main():
                 st.session_state['last_df'] = None
                 st.session_state['cv_valid_count'] = 0
                 st.session_state['cv_invalid_count'] = 0
+                st.session_state['selected_cvs'] = []  # Reset selected_cvs
         else:
             sample_cv_file = st.file_uploader("📌 Tải lên CV tiêu chí", type="pdf", key="sample_cv_file")
             if sample_cv_file:
@@ -308,6 +311,7 @@ def main():
                 st.session_state['last_df'] = None
                 st.session_state['cv_valid_count'] = 0
                 st.session_state['cv_invalid_count'] = 0
+                st.session_state['selected_cvs'] = []  # Reset selected_cvs
         else:
             uploaded_files = st.file_uploader("📅 Tải lên các CV ứng viên", type=["pdf"], accept_multiple_files=True, key="uploaded_files")
             if uploaded_files:
@@ -325,6 +329,7 @@ def main():
                 expected_skills = st.session_state['expected_skills']
                 target_field = st.session_state['target_field']
                 uploaded_paths = st.session_state['uploaded_paths']
+                st.session_state['selected_cvs'] = []  # Reset selected_cvs trước khi phân tích mới
 
                 with st.spinner("🔎 Đang tiến hành phân tích CV..."):
                     my_bar = st.progress(0)
@@ -362,12 +367,12 @@ def main():
                 df_show.index = range(1, len(df_show) + 1)
                 st.dataframe(df_show)
 
-    elif menu == "So sánh CV":
-        st.header("🔍 So sánh CV")
+    elif menu == "So sánh ứng viên":
+        st.header("🔍 So sánh ứng viên")
 
         # Kiểm tra xem đã phân tích CV chưa
         if 'last_df' not in st.session_state or st.session_state['last_df'] is None or len(st.session_state['last_df']) == 0:
-            st.warning("Vui lòng phân tích CV trước tại mục 'Phân tích CV'!")
+            st.warning("Vui lòng phân tích CV trước tại mục 'Tải lên và phân tích CV'!")
         else:
             df = st.session_state['last_df']
             uploaded_paths = st.session_state['uploaded_paths']
@@ -380,27 +385,51 @@ def main():
             if len(suitable_df) == 0:
                 st.warning("Không có CV nào phù hợp để so sánh. Vui lòng kiểm tra lại kết quả phân tích!")
             else:
-                # Lựa chọn CV để so sánh từ danh sách CV phù hợp
-                if 'selected_cvs' not in st.session_state:
-                    st.session_state['selected_cvs'] = []
+                # Lấy danh sách options
+                options = suitable_df['Tên file'].tolist()
 
+                # Lọc default để chỉ giữ lại các giá trị có trong options
+                valid_selected_cvs = [cv for cv in st.session_state['selected_cvs'] if cv in options]
+
+                # Cập nhật session state với các giá trị hợp lệ
+                if valid_selected_cvs != st.session_state['selected_cvs']:
+                    st.session_state['selected_cvs'] = valid_selected_cvs
+
+                # Hiển thị multiselect để chọn CV
                 selected_cvs = st.multiselect(
                     "Chọn CV phù hợp để so sánh:",
-                    suitable_df['Tên file'].tolist(),
-                    default=st.session_state['selected_cvs']
+                    options,
+                    default=st.session_state['selected_cvs'],
+                    key="compare_cvs"
                 )
 
-                st.session_state['selected_cvs'] = selected_cvs
+                # Cập nhật session state
+                if selected_cvs != st.session_state['selected_cvs']:
+                    st.session_state['selected_cvs'] = selected_cvs
 
-                if len(selected_cvs) < 2:
-                    st.info("Vui lòng chọn ít nhất 2 CV để so sánh.")
+                # Hiển thị thông báo trạng thái
+                if len(selected_cvs) == 0:
+                    st.info("Bạn chưa chọn CV nào để so sánh.")
+                elif len(selected_cvs) == 1:
+                    st.info(f"Đã chọn 1 CV: {selected_cvs[0]}. Vui lòng chọn thêm ít nhất 1 CV nữa để so sánh.")
                 else:
+                    # Hiển thị thông tin CV tiêu chí với icon và không highlight
+                    st.subheader("📌 Tiêu chí tuyển dụng (CV tiêu chí)")
+                    sample_cv_path = st.session_state['sample_cv_path']
+                    if sample_cv_path:
+                        sample_text = extract_text_from_pdf(sample_cv_path)
+                        sample_skills = extract_skills_list(sample_text)
+                        st.markdown(f"- **Tên file**: {os.path.basename(sample_cv_path)}")
+                        st.markdown(f"- **Mảng IT**: {target_field}")
+                        if sample_skills:
+                            st.markdown(f"- **📋 Kỹ năng yêu cầu**: {', '.join(sample_skills)}")
+                        else:
+                            st.markdown("- **📋 Kỹ năng yêu cầu**: Không rõ")
+
                     # Tạo bảng so sánh
                     comparison_data = {
                         "Tiêu chí": [
                             "Tên ứng viên",
-                            "Tên file",
-                            "Mảng IT",
                             "Phần trăm phù hợp",
                             "Kết quả",
                             "Kỹ năng phù hợp",
@@ -426,7 +455,6 @@ def main():
                                 cv_details.append({
                                     'Tên file': selected_file,
                                     'Tên ứng viên': candidate_name,
-                                    'Mảng IT': result['Mảng IT'],
                                     'Phần trăm phù hợp': result['Phần trăm phù hợp'],
                                     'Phần trăm phù hợp_raw': f"{result['Phần trăm phù hợp']}%",
                                     'Kết quả': result['Kết quả'],
@@ -465,8 +493,6 @@ def main():
 
                         comparison_data[f"CV {i+1}"] = [
                             cv['Tên ứng viên'],
-                            cv['Tên file'],
-                            cv['Mảng IT'],
                             percentage_str,
                             result,
                             matched_skills,
@@ -481,7 +507,7 @@ def main():
                     def remove_cv(index):
                         if 0 <= index < len(st.session_state['selected_cvs']):
                             st.session_state['selected_cvs'].pop(index)
-                        st.rerun()  # Sử dụng st.rerun() thay vì st.experimental_rerun()
+                        st.rerun()
 
                     # Thêm nút "Xóa" cho từng CV
                     st.subheader("📊 Bảng so sánh CV")
@@ -509,7 +535,7 @@ def main():
 
         # Kiểm tra xem đã phân tích CV chưa
         if 'last_df' not in st.session_state or st.session_state['last_df'] is None or len(st.session_state['last_df']) == 0:
-            st.warning("Vui lòng phân tích CV trước tại mục 'Phân tích CV'!")
+            st.warning("Vui lòng phân tích CV trước tại mục 'Tải lên và phân tích CV'!")
         else:
             df = st.session_state['last_df']
 
@@ -546,14 +572,11 @@ def main():
                         xaxis_title="Tên ứng viên",
                         yaxis_title="Phần trăm phù hợp (%)",
                         yaxis_range=[0, 100],
-                        plot_bgcolor='#181c24',
-                        paper_bgcolor='#181c24',
-                        font_color='#00d4ff'
                     )
                     st.plotly_chart(fig)
 
-    elif menu == "Dashboard báo cáo":
-        st.header("📊 Dashboard Báo cáo & Phân tích Kết quả")
+    elif menu == "Báo cáo tổng quan":
+        st.header("📊 Báo cáo tổng quan")
         st.markdown("> Tải lên file kết quả phân tích (CSV) hoặc sử dụng dữ liệu vừa phân tích để xem báo cáo tổng quan.", unsafe_allow_html=True)
         uploaded_csv = st.file_uploader("Tải lên file kết quả phân tích (CSV)", type="csv")
         df = None
